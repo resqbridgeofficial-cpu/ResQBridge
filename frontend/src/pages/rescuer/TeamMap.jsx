@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { GoogleMap, useLoadScript } from '@react-google-maps/api'
+import { useState, useEffect, useRef } from 'react'
+import { useJsApiLoader } from '@react-google-maps/api'
 import { useAuth } from '../../context/AuthContext'
 import { rescuer as rescuerApi } from '../../services/api'
-
-const containerStyle = { width: '100%', height: '100%', borderRadius: '0.75rem' }
 
 const DEFAULT_CENTER = { lat: 9.799447, lng: 118.693766 }
 
@@ -19,23 +17,34 @@ function icon(g, scale, fillColor) {
 }
 
 export default function TeamMap() {
-  const { isLoaded } = useLoadScript({ googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY })
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY })
   const { user } = useAuth()
   const [rescuers, setRescuers] = useState([])
-  const [mapReady, setMapReady] = useState(false)
   const mapRef = useRef(null)
+  const rescuerMarkersRef = useRef({})
+  const infoWindowRef = useRef(null)
+  const origPanToRef = useRef(null)
+  const containerRef = useRef(null)
 
-  const onMapLoad = useCallback((map) => {
+  useEffect(() => {
+    if (!isLoaded || !containerRef.current || mapRef.current) return
+    const map = new window.google.maps.Map(containerRef.current, {
+      center: DEFAULT_CENTER,
+      zoom: 12,
+    })
     mapRef.current = map
-    setMapReady(true)
+    origPanToRef.current = map.panTo.bind(map)
+    map.addListener('dragstart', () => console.log('[MAP] dragstart'))
+    map.addListener('dragend', () => console.log('[MAP] dragend'))
+    map.addListener('center_changed', () => {
+      console.log('[MAP] center_changed', map.getCenter().toJSON(), new Error().stack?.split('\n').slice(2, 6).join('\n'))
+    })
+    console.log('[MAP] created at', DEFAULT_CENTER)
     fetchUserMarker(map)
-  }, [])
-
-  const mapEl = useMemo(() => (
-    <div className="rounded-xl overflow-hidden border-2 border-gray-200" style={{ height: '70vh' }}>
-      <GoogleMap mapContainerStyle={containerStyle} defaultCenter={DEFAULT_CENTER} defaultZoom={12} onLoad={onMapLoad} />
-    </div>
-  ), [])
+    return () => {
+      window.google.maps.event.clearInstanceListeners(map)
+    }
+  }, [isLoaded])
 
   function fetchUserMarker(map) {
     if (!navigator.geolocation) return
@@ -59,6 +68,7 @@ export default function TeamMap() {
     const g = window.google
     if (!mapRef.current || !g) return
 
+    console.log('[RESCUERS] updating markers, count:', rescuers.length)
     const ids = new Set(rescuers.filter((r) => r.rescuerEmail !== user?.email).map((r) => r.userId))
 
     for (const id of Object.keys(rescuerMarkersRef.current)) {
@@ -81,7 +91,7 @@ export default function TeamMap() {
           icon: icon(g, 8, '#16a34a'),
         })
         marker.addListener('click', () => {
-          mapRef.current.panTo(pos)
+          origPanToRef.current(pos)
           if (infoWindowRef.current) infoWindowRef.current.close()
           infoWindowRef.current = new g.maps.InfoWindow({
             position: pos,
@@ -108,6 +118,7 @@ export default function TeamMap() {
     async function fetchLocations() {
       try {
         const data = await rescuerApi.getRescuerLocations()
+        console.log('[FETCH] got', data.locations?.length, 'locations')
         setRescuers(data.locations || [])
       } catch {}
     }
@@ -116,14 +127,6 @@ export default function TeamMap() {
     return () => clearInterval(id)
   }, [])
 
-  if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center h-full rounded-xl bg-gray-100 border-2 border-gray-200" style={{ minHeight: '500px' }}>
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-600 border-t-transparent" />
-      </div>
-    )
-  }
-
   return (
     <main className="flex-1 overflow-y-auto p-6 md:p-8">
       <div className="mx-auto max-w-6xl">
@@ -131,7 +134,13 @@ export default function TeamMap() {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Team Map</h1>
           <p className="mt-1 text-lg text-gray-500">See other rescuers in your area ({rescuers.length} online)</p>
         </div>
-        {mapEl}
+        <div ref={containerRef} className="rounded-xl overflow-hidden border-2 border-gray-200" style={{ height: '70vh' }}>
+          {!isLoaded && (
+            <div className="flex items-center justify-center h-full bg-gray-100 min-h-[500px]">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-600 border-t-transparent" />
+            </div>
+          )}
+        </div>
       </div>
     </main>
   )
