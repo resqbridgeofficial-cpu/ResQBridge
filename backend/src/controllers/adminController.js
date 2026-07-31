@@ -32,6 +32,7 @@ const getUsers = async (_req, res) => {
     email: u.email,
     phoneNumber: u.phoneNumber,
     role: u.role,
+    organization: u.organization || null,
   }));
   res.json({ users: sanitized });
 };
@@ -49,6 +50,7 @@ const getUser = async (req, res) => {
       email: user.email,
       phoneNumber: user.phoneNumber,
       role: user.role,
+      organization: user.organization || null,
     },
   });
 };
@@ -117,6 +119,7 @@ const createUser = async (req, res) => {
     email: normalizedEmail,
     password: hashedPassword,
     role: "rescuer",
+    organization: req.body.organization || undefined,
   });
 
   await logEvent({ req, userId: req.user.uuid, eventType: "admin_create_user", metadata: { targetEmail: normalizedEmail, role: "rescuer" } });
@@ -141,10 +144,11 @@ const getAdminReports = async (req, res) => {
     phone: r.phone || "",
     category: r.category || "other",
     animalType: r.animalName || r.animalType,
-    urgency: r.urgency || "medium",
+    quantity: r.quantity ?? null,
     location: r.location,
     description: r.description,
     images: r.images ? resolveImageUrls(r.images) : [],
+    rescuerImages: r.rescuerImages ? resolveImageUrls(r.rescuerImages) : [],
     status: STATUS_MAP[r.status] || r.status,
     assignedTo: r.assignedRescuerEmail || r.assignedTo || null,
     assignedUser: r.assignedUser || null,
@@ -211,7 +215,6 @@ const getRescuerReports = async (req, res) => {
     phone: r.phone,
     category: r.category,
     animalType: r.animalType,
-    urgency: r.urgency,
     location: r.location,
     description: r.description,
     latitude: r.latitude,
@@ -309,6 +312,14 @@ const updatePassword = async (req, res) => {
   res.json({ message: "Password updated successfully." });
 };
 
+const getReportNotes = async (req, res) => {
+  const { id } = req.params;
+  const notes = await convexClient.query(anyApi.notes.getReportNotes, {
+    reportId: id,
+  });
+  res.json({ notes });
+};
+
 const updateAdminProfile = async (req, res) => {
   const { firstName, lastName, phoneNumber, email } = req.body;
   const userId = req.user.uuid;
@@ -340,4 +351,4 @@ const updateAdminProfile = async (req, res) => {
   res.json({ message: "Profile updated.", user: safeUser });
 };
 
-module.exports = { getUsers, getUser, updateUserRole, createUser, getStats, getAdminReports, assignReport, getRescuerLocations, getRescuerReports, archiveReport, bulkArchiveReports, unarchiveReport, getArchivedReports, deleteReport, updatePassword, updateAdminProfile };
+module.exports = { getUsers, getUser, updateUserRole, createUser, getStats, getAdminReports, assignReport, getRescuerLocations, getRescuerReports, archiveReport, bulkArchiveReports, unarchiveReport, getArchivedReports, deleteReport, updatePassword, updateAdminProfile, getReportNotes };

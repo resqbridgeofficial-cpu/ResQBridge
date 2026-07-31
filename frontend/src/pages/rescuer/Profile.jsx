@@ -10,6 +10,7 @@ export default function RescuerProfile() {
   const [lastName, setLastName] = useState(user?.lastName || '')
   const [email, setEmail] = useState(user?.email || '')
   const [phoneDigits, setPhoneDigits] = useState(user?.phoneNumber?.replace(/^\+63/, '') || '')
+  const [organization, setOrganization] = useState(user?.organization || '')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
@@ -19,9 +20,13 @@ export default function RescuerProfile() {
       setMessage({ type: 'error', text: 'Phone number is required (10 digits).' })
       return
     }
+    if (!organization.trim()) {
+      setMessage({ type: 'error', text: 'Organization / Affiliation is required.' })
+      return
+    }
     setSaving(true)
     try {
-      const result = await rescuerApi.updateProfile({ firstName, lastName, email, phoneNumber: '+63' + phoneDigits })
+      const result = await rescuerApi.updateProfile({ firstName, lastName, email, phoneNumber: '+63' + phoneDigits, organization })
       updateUser(result.user)
       setMessage({ type: 'success', text: 'Profile saved successfully!' })
     } catch (err) {
@@ -61,6 +66,7 @@ export default function RescuerProfile() {
             </div>
             <h2 className="mt-4 text-2xl font-bold text-white">{user.firstName} {user.lastName}</h2>
             <p className="text-lg text-white/90">{user.email}</p>
+            {user.organization && <p className="mt-1 text-base text-white/70">{user.organization}</p>}
           </div>
 
           <form onSubmit={(e) => e.preventDefault()} className="p-6 md:p-8 space-y-6">
@@ -111,6 +117,17 @@ export default function RescuerProfile() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-300 px-5 py-3.5 text-lg focus:border-amber-600 focus:outline-none focus:ring-4 focus:ring-amber-100 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-base font-bold text-gray-700 mb-1.5">Organization / Affiliation</label>
+              <input
+                type="text" required
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                placeholder="e.g. PWRCCC, BARMM, LGU"
                 className="w-full rounded-xl border-2 border-gray-300 px-5 py-3.5 text-lg focus:border-amber-600 focus:outline-none focus:ring-4 focus:ring-amber-100 transition-all"
               />
             </div>

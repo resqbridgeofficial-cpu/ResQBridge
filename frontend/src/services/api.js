@@ -140,6 +140,7 @@ export const admin = {
     request(`/admin/notifications/${id}/read`, { method: 'PATCH' }),
   markAllAsRead: () =>
     request('/admin/notifications/read-all', { method: 'POST' }),
+  getReportNotes: (reportId) => request(`/admin/reports/${reportId}/notes`),
   getArchivedReports: () => request('/admin/reports/archived'),
   archiveReport: (reportId) =>
     request(`/admin/reports/${reportId}/archive`, {
@@ -193,6 +194,16 @@ export const rescuer = {
       body: JSON.stringify({ availability }),
     }),
   getNotes: (reportId) => request(`/rescuer/reports/${reportId}/notes`),
+  saveReportImages: (reportId, images) =>
+    request(`/rescuer/reports/${reportId}/images`, {
+      method: 'POST',
+      body: JSON.stringify({ images }),
+    }),
+  removeReportImage: (reportId, imageUrl) =>
+    request(`/rescuer/reports/${reportId}/images`, {
+      method: 'DELETE',
+      body: JSON.stringify({ imageUrl }),
+    }),
   addNote: (reportId, content) =>
     request(`/rescuer/reports/${reportId}/notes`, {
       method: 'POST',
@@ -224,6 +235,8 @@ export const rescuer = {
   getNotifications: () => request('/rescuer/notifications'),
   markAllNotificationsRead: () =>
     request('/rescuer/notifications/read-all', { method: 'POST' }),
+  markNotificationRead: (id) =>
+    request(`/rescuer/notifications/${id}/read`, { method: 'PATCH' }),
 }
 
 export const logs = {

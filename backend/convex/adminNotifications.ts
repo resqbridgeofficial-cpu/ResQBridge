@@ -5,12 +5,14 @@ export const insertNotification = mutation({
   args: {
     type: v.string(),
     message: v.string(),
+    reportId: v.optional(v.string()),
     link: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("adminNotifications", {
       type: args.type,
       message: args.message,
+      reportId: args.reportId,
       link: args.link,
       read: false,
       createdAt: Date.now(),

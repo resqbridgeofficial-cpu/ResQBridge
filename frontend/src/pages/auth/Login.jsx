@@ -83,7 +83,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="mt-1.5 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                  placeholder="email@example.com or +639XXXXXXXXX"
+                  placeholder=""
                   required
                   autoComplete="username"
                 />
@@ -97,7 +97,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-10 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
-                  placeholder="••••••••"
+                  placeholder=""
                   required
                 />
                 <button
@@ -119,16 +119,6 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-gray-500">
-                <input type="checkbox" className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                Remember me
-              </label>
-              <Link to="/v1/forgot-password" className="font-medium text-green-700 underline-offset-2 hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -136,16 +126,17 @@ export default function Login() {
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
+            {error && (
+              <div className="mt-4 text-center">
+                <Link to="/v1/forgot-password" className="text-sm font-medium text-green-700 underline-offset-2 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+            )}
           </form>
 
           <div className="mt-6" />
         </div>
-
-        <p className="mt-6 text-center">
-          <Link to="/" className="text-xs text-gray-400 underline-offset-2 hover:underline hover:text-gray-600">
-            &larr; Back to Home
-          </Link>
-        </p>
       </div>
     </div>
   )

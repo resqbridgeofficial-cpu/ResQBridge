@@ -27,6 +27,7 @@ export default defineSchema({
       v.literal("available"),
       v.literal("busy"),
     )),
+    organization: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_uuid", ["uuid"])
@@ -52,13 +53,14 @@ export default defineSchema({
     phone: v.string(),
     category: v.string(),
     animalType: v.string(),
-    urgency: v.string(),
     quantity: v.optional(v.number()),
     location: v.string(),
     description: v.optional(v.string()),
     images: v.optional(v.string()),
+    rescuerImages: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
+    urgency: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("assigned"),
@@ -82,6 +84,7 @@ export default defineSchema({
   adminNotifications: defineTable({
     type: v.string(),
     message: v.string(),
+    reportId: v.optional(v.string()),
     link: v.optional(v.string()),
     read: v.boolean(),
     createdAt: v.number(),

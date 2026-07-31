@@ -88,7 +88,7 @@ app.post("/api/v1/log/logout", async (req, res) => {
   if (token) {
     try { userId = jwt.verify(token, process.env.JWT_SECRET).uuid; } catch {}
   }
-  res.clearCookie("token", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/" });
+  res.clearCookie("token", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
   await logEvent({ req, userId, eventType: "logout" });
   res.json({ message: "Logged." });
 });
@@ -124,7 +124,7 @@ app.post("/api/v1/newsletter", honeypot(), asyncHandler(async (req, res) => {
 app.get("/api/v1/auth/me", authenticate, asyncHandler(async (req, res) => {
   const user = await convexClient.query(anyApi.users.getUserByUuid, { uuid: req.user.uuid });
   if (!user) {
-    res.clearCookie("token", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/" });
+    res.clearCookie("token", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
     return res.status(401).json({ message: "User not found." });
   }
   const { password, ...safeUser } = user;

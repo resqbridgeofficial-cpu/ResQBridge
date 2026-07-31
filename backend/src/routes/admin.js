@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, authorize, authorizeWithPermission } = require("../middleware/auth");
 const { validate } = require("../middleware/validate");
 const { asyncHandler } = require("../middleware/errorHandler");
-const { getUsers, getUser, updateUserRole, createUser, updatePassword, getStats, getAdminReports, assignReport, getRescuerLocations, getRescuerReports, archiveReport, bulkArchiveReports, unarchiveReport, getArchivedReports, deleteReport, updateAdminProfile } = require("../controllers/adminController");
+const { getUsers, getUser, updateUserRole, createUser, updatePassword, getStats, getAdminReports, assignReport, getRescuerLocations, getRescuerReports, archiveReport, bulkArchiveReports, unarchiveReport, getArchivedReports, deleteReport, updateAdminProfile, getReportNotes } = require("../controllers/adminController");
 const { getLogs, getLogStats, getLogsByIP, deleteOldLogs } = require("../controllers/logController");
 const { getDashboardData } = require("../controllers/dashboardController");
 const { getConfig, updateConfig, getLandingConfig, updateLandingConfig } = require("../controllers/configController");
@@ -44,6 +44,7 @@ const createUserRules = [
   body("email").trim().normalizeEmail().isEmail().withMessage("Valid email is required."),
   body("phoneNumber").trim().notEmpty().matches(/^\+?\d{7,15}$/).withMessage("Valid phone number is required."),
   body("password").trim().isLength({ min: 8 }).withMessage("Password must be at least 8 characters."),
+  body("organization").trim().notEmpty().withMessage("Organization is required."),
 ];
 router.post("/users/create", authorizeWithPermission("users", "write"), createUserRules, validate, asyncHandler(createUser));
 
@@ -68,6 +69,7 @@ router.post("/reports/bulk/archive", authorizeWithPermission("reports", "execute
 router.get("/reports/archived", authorizeWithPermission("archive"), asyncHandler(getArchivedReports));
 router.post("/reports/:id/unarchive", authorizeWithPermission("archive", "write"), reportIdParam, validate, asyncHandler(unarchiveReport));
 router.delete("/reports/:id", authorizeWithPermission("archive", "execute"), reportIdParam, validate, asyncHandler(deleteReport));
+router.get("/reports/:id/notes", authorizeWithPermission("reports"), reportIdParam, validate, asyncHandler(getReportNotes));
 router.get("/rescuer-locations", authorizeWithPermission("rescuerMap"), asyncHandler(getRescuerLocations));
 router.get("/rescuers/:uuid/reports", authorizeWithPermission("rescuerMap"), uuidParam, validate, asyncHandler(getRescuerReports));
 

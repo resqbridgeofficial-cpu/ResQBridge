@@ -1,15 +1,11 @@
+const sharp = require("sharp");
 const convexClient = require("../config/convex");
 const { anyApi } = require("convex/server");
 const { logEvent } = require("../middleware/logAudit");
 const { notifyAdmin } = require("../services/adminNotification");
-
-const URGENCY_MAP = {
-  Healthy: "low",
-  Injured: "high",
-  Sick: "high",
-  Trapped: "high",
-  Unknown: "high",
-};
+const { publish } = require("../services/notification");
+const { uploadToCloudinary } = require("./uploadController");
+const { v4: uuidv4 } = require("uuid");
 
 const submitReport = async (req, res) => {
   try {
@@ -31,8 +27,6 @@ const submitReport = async (req, res) => {
     return res.status(400).json({ message: "Description is required and must be at most 2000 characters." });
   }
 
-  const urgency = URGENCY_MAP[wildlifeCondition] || "medium";
-
   const qty = quantity ? parseInt(quantity, 10) : undefined;
   if (qty !== undefined && (isNaN(qty) || qty < 1)) {
     return res.status(400).json({ message: "Quantity must be a positive number." });
@@ -41,7 +35,26 @@ const submitReport = async (req, res) => {
   const lat = latitude ? parseFloat(latitude) : undefined;
   const lng = longitude ? parseFloat(longitude) : undefined;
 
-  const images = [];
+  const imagePublicIds = [];
+  if (req.files && req.files.length > 0) {
+    for (const file of req.files) {
+      try {
+        const processed = await sharp(file.buffer)
+          .resize({ width: 1920, withoutEnlargement: true })
+          .jpeg({ quality: 80, mozjpeg: true })
+          .toBuffer();
+        const result = await uploadToCloudinary(processed, {
+          folder: "resqbridge/images",
+          public_id: uuidv4(),
+          resource_type: "image",
+          type: "authenticated",
+        });
+        imagePublicIds.push(result.public_id);
+      } catch (err) {
+        console.error("Image upload error:", err?.message || err);
+      }
+    }
+  }
 
   const metadata = {
     name: name || "Anonymous",
@@ -49,26 +62,24 @@ const submitReport = async (req, res) => {
     category: category || "other",
     animalType,
     wildlifeCondition,
-    urgency,
     location,
     description,
-    images,
+    images: imagePublicIds,
   };
 
   await logEvent({ req, eventType: "report_animal", metadata });
 
   const clientIp = req.ip || req.connection?.remoteAddress || "unknown";
 
-  await convexClient.mutation(anyApi.reports.insertReport, {
+  const reportId = await convexClient.mutation(anyApi.reports.insertReport, {
     name: name || "Anonymous",
     phone,
     category: category || "other",
     animalType,
-    urgency,
     quantity: qty,
     location,
     description,
-    images: images.length > 0 ? images.join(",") : undefined,
+    images: imagePublicIds.length > 0 ? imagePublicIds.join(",") : undefined,
     latitude: lat,
     longitude: lng,
     status: "pending",
@@ -77,11 +88,14 @@ const submitReport = async (req, res) => {
 
   await notifyAdmin({
     type: "new_report",
-    message: `New ${urgency} ${animalType} report from ${name || "Anonymous"} at ${location}`,
+    message: `New ${animalType} report from ${name || "Anonymous"} at ${location}`,
+    reportId,
     link: "/admin/dashboard/reports",
   });
 
-  res.status(201).json({ message: "Report submitted successfully.", images });
+  publish({ type: "report:new", reportId, animalType, location, name: name || "Anonymous" });
+
+  res.status(201).json({ message: "Report submitted successfully.", imageCount: imagePublicIds.length });
 } catch (err) {
   console.error("submitReport error:", err);
   res.status(500).json({ message: "Internal server error: " + err.message });

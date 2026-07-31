@@ -47,6 +47,14 @@ export function NotificationProvider({ children }) {
     } catch {}
   }, [])
 
+  const markRead = useCallback(async (id) => {
+    try {
+      await rescuerApi.markNotificationRead(id)
+      setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, read: true } : n)))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+    } catch {}
+  }, [])
+
   useEffect(() => {
     fetchNotifications()
   }, [user, fetchNotifications])
@@ -74,7 +82,7 @@ export function NotificationProvider({ children }) {
   }, [user, addToast, fetchNotifications])
 
   return (
-    <NotificationContext.Provider value={{ toasts, notifications, unreadCount, clearToasts, markAllRead, fetchNotifications }}>
+    <NotificationContext.Provider value={{ toasts, notifications, unreadCount, clearToasts, markAllRead, markRead, fetchNotifications }}>
       {children}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm">
         {toasts.map((t) => (

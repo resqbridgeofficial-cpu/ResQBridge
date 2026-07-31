@@ -73,6 +73,7 @@ const register = async (req, res) => {
     email,
     password: hashedPassword,
     role: "rescuer",
+    organization: req.body.organization || undefined,
   });
 
   const token = jwt.sign(
@@ -85,14 +86,14 @@ const register = async (req, res) => {
   res.cookie("token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: 365 * 24 * 60 * 60 * 1000,
     path: "/",
   });
 
   res.status(201).json({
     message: "User registered successfully.",
-    user: { uuid: userUuid, firstName, lastName, email, role: "rescuer" },
+    user: { uuid: userUuid, firstName, lastName, email, role: "rescuer", phoneNumber, organization: req.body.organization || null },
   });
 };
 
@@ -109,22 +110,26 @@ const login = async (req, res) => {
   const trimmed = email.trim();
   const isPhone = !trimmed.includes("@") && /^[\d\s+\-()]{7,20}$/.test(trimmed);
 
-  const identifier = isPhone ? normalizePhone(trimmed) : trimmed.toLowerCase();
+  const normalized = isPhone ? normalizePhone(trimmed) : trimmed.toLowerCase();
 
-  const failKey = `login:${identifier}`;
+  const failKey = `login:${normalized}`;
   const attempts = failedAttempts.get(failKey) || 0;
   if (attempts >= 5) {
     throw new AppError("Account temporarily locked. Try again later.", 429);
   }
 
-  const user = isPhone
-    ? await convexClient.query(anyApi.users.getUserByPhoneNumber, { phoneNumber: identifier })
-    : await convexClient.query(anyApi.users.getUserByEmail, { email: identifier });
+  let user = isPhone
+    ? await convexClient.query(anyApi.users.getUserByPhoneNumber, { phoneNumber: normalized })
+    : await convexClient.query(anyApi.users.getUserByEmail, { email: normalized });
+
+  if (!user && !isPhone && trimmed !== normalized) {
+    user = await convexClient.query(anyApi.users.getUserByEmail, { email: trimmed });
+  }
 
   if (!user) {
     failedAttempts.set(failKey, attempts + 1);
     setTimeout(() => { const c = failedAttempts.get(failKey); if (c && c <= attempts + 1) failedAttempts.delete(failKey); }, 15 * 60 * 1000);
-    await logEvent({ req, eventType: "login_attempt", metadata: { [isPhone ? "phone" : "email"]: identifier, reason: "user_not_found" } });
+    await logEvent({ req, eventType: "login_attempt", metadata: { [isPhone ? "phone" : "email"]: normalized, reason: "user_not_found" } });
     throw new AppError("Invalid email or password.", 401);
   }
 
@@ -132,7 +137,7 @@ const login = async (req, res) => {
   if (!isMatch) {
     failedAttempts.set(failKey, attempts + 1);
     setTimeout(() => { const c = failedAttempts.get(failKey); if (c && c <= attempts + 1) failedAttempts.delete(failKey); }, 15 * 60 * 1000);
-    await logEvent({ req, eventType: "login_attempt", metadata: { [isPhone ? "phone" : "email"]: identifier, reason: "wrong_password" } });
+    await logEvent({ req, eventType: "login_attempt", metadata: { [isPhone ? "phone" : "email"]: normalized, reason: "wrong_password" } });
     throw new AppError("Invalid email or password.", 401);
   }
 
@@ -148,7 +153,7 @@ const login = async (req, res) => {
   res.cookie("token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: 365 * 24 * 60 * 60 * 1000,
     path: "/",
   });
@@ -160,7 +165,9 @@ const login = async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
+      phoneNumber: user.phoneNumber,
       role: user.role,
+      organization: user.organization || null,
     },
   });
 };
@@ -170,19 +177,21 @@ const forgotPassword = async (req, res) => {
 
   const user = await convexClient.query(anyApi.users.getUserByEmail, { email });
 
-  if (user) {
-    const resetToken = jwt.sign(
-      { uuid: user.uuid, email: user.email, type: "password-reset" },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" },
-    );
-
-    await sendPasswordReset(email, resetToken);
-
-    await logEvent({ req, userId: user.uuid, eventType: "password_reset", metadata: { email } });
+  if (!user) {
+    return res.status(404).json({ message: "No account found with that email address." });
   }
 
-  res.json({ message: "If an account with that email exists, a reset link has been sent." });
+  const resetToken = jwt.sign(
+    { uuid: user.uuid, email: user.email, type: "password-reset" },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" },
+  );
+
+  await sendPasswordReset(email, resetToken);
+
+  await logEvent({ req, userId: user.uuid, eventType: "password_reset", metadata: { email } });
+
+  res.json({ message: "A reset link has been sent to your email." });
 };
 
 const resetPassword = async (req, res) => {
@@ -191,8 +200,8 @@ const resetPassword = async (req, res) => {
   if (!token || !password) {
     throw new AppError("Token and password are required.", 400);
   }
-  if (password.length < 6) {
-    throw new AppError("Password must be at least 6 characters.", 400);
+  if (password.length < 8) {
+    throw new AppError("Password must be at least 8 characters.", 400);
   }
 
   let decoded;

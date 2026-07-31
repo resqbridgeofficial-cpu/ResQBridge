@@ -47,15 +47,19 @@ export default function NotificationBell({ adminApi }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  async function handleClick(id, link) {
+  async function handleClick(n) {
     try {
-      await adminApi.markAsRead(id)
+      await adminApi.markAsRead(n._id)
       setUnreadCount((c) => Math.max(0, c - 1))
       setNotifications((prev) =>
-        prev.map((n) => (n._id === id ? { ...n, read: true } : n))
+        prev.map((notif) => (notif._id === n._id ? { ...notif, read: true } : notif))
       )
     } catch {}
-    if (link) navigate(link)
+    if (n.reportId) {
+      navigate('/admin/dashboard/reports', { state: { reportId: n.reportId } })
+    } else if (n.link) {
+      navigate(n.link)
+    }
     setOpen(false)
   }
 
@@ -111,7 +115,7 @@ export default function NotificationBell({ adminApi }) {
                 return (
                   <button
                     key={n._id}
-                    onClick={() => handleClick(n._id, n.link)}
+                    onClick={() => handleClick(n)}
                     className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
                       !n.read ? 'bg-blue-50/40' : ''
                     }`}

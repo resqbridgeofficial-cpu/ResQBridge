@@ -71,7 +71,14 @@ const uploadImage = async (req, res) => {
       type: "authenticated",
     });
 
-    res.json({ url: result.public_id });
+    const signedUrl = cloudinary.url(result.public_id, {
+      type: "authenticated",
+      sign_url: true,
+      secure: true,
+      expires_at: Math.floor(Date.now() / 1000) + 86400,
+    });
+
+    res.json({ url: result.public_id, signedUrl });
   } catch (err) {
     console.error("Upload error:", err);
     return res.status(400).json({ message: "Invalid or corrupt image file." });

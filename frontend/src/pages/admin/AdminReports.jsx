@@ -1,13 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { DoubleConfirmation, Modal, SkeletonCard } from '../../components/ui'
 import { admin as adminApi } from '../../services/api'
 import { MedicalIcon, StrandedIcon, SearchIcon, PawIcon, HouseIcon, ClipboardIcon } from '../../components/SvgIcons'
 import ReportMap from '../rescuer/ReportMap'
-
-const URGENCY_LABEL = {
-  low: { label: 'Low', class: 'bg-gray-100 text-gray-700' },
-  high: { label: 'High', class: 'bg-red-100 text-red-800 font-bold' },
-}
 
 const STATUS_BADGE = {
   pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -21,7 +17,7 @@ const STATUS_BADGE = {
 
 const STATUS_LABELS = {
   pending: 'Pending', assigned: 'Assigned', en_route: 'En Route',
-  in_progress: 'Working', transport_to_pwrccc: 'Transport to PWRCCC',
+  in_progress: 'In Progress',
   resolved: 'Successful', failed: 'Failed',
 }
 
@@ -51,19 +47,59 @@ export default function AdminReports({ adminPermissions }) {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkArchiving, setBulkArchiving] = useState(false)
   const [assignTarget, setAssignTarget] = useState({})
+  const [notes, setNotes] = useState({})
+  const [notesLoading, setNotesLoading] = useState({})
+  const location = useLocation()
   const pageSize = 10
 
   useEffect(() => {
+    if (location.state?.reportId) {
+      setExpanded(location.state.reportId)
+      setTimeout(() => {
+        document.getElementById(`report-${location.state.reportId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 300)
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
+
+  const fetchReports = useCallback(async () => {
+    try {
+      const data = await adminApi.getReports()
+      setReports(data.reports || [])
+    } catch {}
+  }, [])
+
+  useEffect(() => {
     Promise.allSettled([
-      adminApi.getReports(),
+      fetchReports(),
       adminApi.getUsers(),
       adminApi.getRescuerLocations(),
-    ]).then(([reportRes, userRes, locRes]) => {
-      if (reportRes.status === 'fulfilled') setReports(reportRes.value.reports || [])
+    ]).then(([, userRes, locRes]) => {
       if (userRes.status === 'fulfilled') setUsers((userRes.value.users || []).filter((u) => u.role === 'rescuer'))
       if (locRes.status === 'fulfilled') setLocations(locRes.value.locations || [])
     }).finally(() => setLoading(false))
-  }, [])
+  }, [fetchReports])
+
+  useEffect(() => {
+    let es
+    function connect() {
+      es = new EventSource('/api/v1/report/updates', { withCredentials: true })
+      es.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data)
+          if (event.type === 'report:new' || event.type === 'report:claimed' || event.type === 'report:status' || event.type === 'report:images') {
+            fetchReports()
+          }
+        } catch {}
+      }
+      es.onerror = () => {
+        es.close()
+        setTimeout(connect, 3000)
+      }
+    }
+    connect()
+    return () => { if (es) es.close() }
+  }, [fetchReports])
 
   function getRescuerStatus(uuid) {
     const activeReport = reports.find(
@@ -71,9 +107,11 @@ export default function AdminReports({ adminPermissions }) {
     )
     if (activeReport) {
       if (activeReport.status === 'en_route') return { label: 'En Route', color: 'text-blue-700' }
-      if (activeReport.status === 'in_progress') return { label: 'Busy', color: 'text-red-700' }
-      return { label: 'Busy', color: 'text-red-700' }
+      if (activeReport.status === 'in_progress') return { label: 'In Progress', color: 'text-purple-700' }
+      return { label: 'Assigned', color: 'text-indigo-700' }
     }
+    const user = users.find((u) => u.uuid === uuid)
+    if (user?.availability === 'busy') return { label: 'Not Available', color: 'text-red-700' }
     const loc = locations.find((l) => l.userId === uuid)
     const isActive = loc && Date.now() - new Date(loc.updatedAt).getTime() < 120000
     if (isActive) return { label: 'Active', color: 'text-green-700' }
@@ -94,6 +132,16 @@ export default function AdminReports({ adminPermissions }) {
     }
   }
 
+  async function fetchNotes(reportId) {
+    if (notes[reportId]) return
+    setNotesLoading((prev) => ({ ...prev, [reportId]: true }))
+    try {
+      const data = await adminApi.getReportNotes(reportId)
+      setNotes((prev) => ({ ...prev, [reportId]: data.notes || [] }))
+    } catch {}
+    finally { setNotesLoading((prev) => ({ ...prev, [reportId]: false })) }
+  }
+
   const filtered = reports
     .filter((r) => !filter || r.status === filter)
     .filter((r) => {
@@ -106,10 +154,6 @@ export default function AdminReports({ adminPermissions }) {
     })
     .sort((a, b) => {
       if (sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt)
-      if (sortBy === 'urgency') {
-        const order = { high: 0, low: 1 }
-        return (order[a.urgency] ?? 3) - (order[b.urgency] ?? 3)
-      }
       return new Date(b.createdAt) - new Date(a.createdAt)
     })
 
@@ -132,7 +176,7 @@ export default function AdminReports({ adminPermissions }) {
             { key: 'pending', label: 'Pending' },
             { key: 'assigned', label: 'Assigned' },
             { key: 'en_route', label: 'En Route' },
-            { key: 'in_progress', label: 'Working' },
+            { key: 'in_progress', label: 'In Progress' },
             { key: 'resolved', label: 'Successful' },
             { key: 'failed', label: 'Failed' },
           ].map((s) => (
@@ -246,7 +290,6 @@ export default function AdminReports({ adminPermissions }) {
             </div>
           )}
           {paginated.map((r) => {
-            const urgency = URGENCY_LABEL[r.urgency] || URGENCY_LABEL.low
             const statusClass = STATUS_BADGE[r.status] || STATUS_BADGE.pending
             const statusLabel = STATUS_LABELS[r.status] || r.status.replace('_', ' ')
             const isExpanded = expanded === r._id
@@ -255,6 +298,7 @@ export default function AdminReports({ adminPermissions }) {
             return (
               <div
                 key={r._id}
+                id={`report-${r._id}`}
                 className={`rounded-lg border transition-all ${
                   isExpanded
                     ? 'border-green-500 shadow bg-white'
@@ -280,11 +324,12 @@ export default function AdminReports({ adminPermissions }) {
                       />
                     </label>
                   )}
-                  <button
-                    onClick={() => {
-                      const next = isExpanded ? null : r._id
-                      setExpanded(next)
-                    }}
+                    <button
+                      onClick={() => {
+                        const next = isExpanded ? null : r._id
+                        setExpanded(next)
+                        if (next) fetchNotes(next)
+                      }}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left"
                   >
                   <span>{(() => { const Icon = CATEGORY_ICONS[r.category] || ClipboardIcon; return <Icon className="w-5 h-5 text-gray-600 shrink-0" />; })()}</span>
@@ -293,9 +338,6 @@ export default function AdminReports({ adminPermissions }) {
                       <span className="text-sm font-bold text-gray-900">{r.name}</span>
                       <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${statusClass}`}>
                         {statusLabel}
-                      </span>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${urgency.class}`}>
-                        {urgency.label}
                       </span>
                       {r.assignedUser && (
                         <span className="rounded-full bg-indigo-100 text-indigo-800 px-2 py-0.5 text-[11px] font-bold border border-indigo-300 inline-flex items-center gap-1">
@@ -332,7 +374,7 @@ export default function AdminReports({ adminPermissions }) {
                         <p className="text-sm text-gray-900 mt-0.5">{r.animalType}{r.quantity ? ` \u00d7 ${r.quantity}` : ''}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Location</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Landmark</p>
                         <p className="text-sm text-gray-900 mt-0.5">{r.location}</p>
                       </div>
                     </div>
@@ -350,9 +392,9 @@ export default function AdminReports({ adminPermissions }) {
                       <div className="mt-3">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Photos</p>
                         <div className="flex flex-wrap gap-2">
-                          {r.images.map((img, i) => (
-                            <a key={i} href={img} target="_blank" rel="noopener noreferrer"
-                              className="group relative overflow-hidden rounded-lg border border-gray-200">
+                          {r.images?.map((img, i) => (
+                            <a key={`rep-${i}`} href={img} target="_blank" rel="noopener noreferrer"
+                              className="group relative overflow-hidden rounded-lg border border-blue-200">
                               <img src={img} alt="" className="h-16 w-24 object-cover transition group-hover:scale-105" />
                             </a>
                           ))}
@@ -366,6 +408,161 @@ export default function AdminReports({ adminPermissions }) {
                         <div className="overflow-hidden rounded-lg border border-gray-200">
                           <ReportMap latitude={r.latitude} longitude={r.longitude} label={r.animalType} />
                         </div>
+                      </div>
+                    )}
+
+                    {notes[r._id]?.length > 0 && (() => {
+                      const postNotes = []
+                      const diaryNotes = []
+                      const failureNotes = []
+                      const otherNotes = []
+                      notes[r._id].forEach(n => {
+                        if (n.content.startsWith('Post-Rescue Report:')) postNotes.push(n)
+                        else if (n.content.startsWith('Rescue Diary:')) diaryNotes.push(n)
+                        else if (n.content.startsWith('Failure Reason:')) failureNotes.push(n)
+                        else otherNotes.push(n)
+                      })
+
+                      function parsePostReport(content) {
+                        const lines = content.replace('Post-Rescue Report:\n', '').split('\n')
+                        const fields = {}
+                        lines.forEach(line => {
+                          const idx = line.indexOf(': ')
+                          if (idx > 0) {
+                            const key = line.slice(0, idx).trim()
+                            const val = line.slice(idx + 2).trim()
+                            if (key) fields[key] = val
+                          }
+                        })
+                        return fields
+                      }
+
+                      return (<>
+                        {postNotes.map((n, i) => {
+                          const fields = parsePostReport(n.content)
+                          return (
+                            <div key={`post-${i}`} className="mt-3">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Post-Rescue Report</p>
+                              <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
+                                {fields['Condition on arrival'] && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-semibold text-gray-600">Condition on arrival</span>
+                                    <span className={`text-sm font-bold px-2 py-0.5 rounded ${
+                                      fields['Condition on arrival'] === 'Critical' ? 'bg-red-100 text-red-800' :
+                                      fields['Condition on arrival'] === 'Poor' ? 'bg-orange-100 text-orange-800' :
+                                      fields['Condition on arrival'] === 'Fair' ? 'bg-yellow-100 text-yellow-800' :
+                                      fields['Condition on arrival'] === 'Good' ? 'bg-green-100 text-green-800' :
+                                      fields['Condition on arrival'] === 'Excellent' ? 'bg-emerald-100 text-emerald-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>{fields['Condition on arrival']}</span>
+                                  </div>
+                                )}
+                                {fields['Actions taken'] && (
+                                  <div>
+                                    <span className="text-xs font-semibold text-gray-600 block">Actions taken</span>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {fields['Actions taken'].split(', ').map((a, ai) => (
+                                        <span key={ai} className="text-xs bg-white border border-blue-300 text-blue-800 px-2 py-0.5 rounded-full">{a}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {fields['Outcome'] && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-semibold text-gray-600">Outcome</span>
+                                    <span className={`text-sm font-bold px-2 py-0.5 rounded ${
+                                      fields['Outcome'] === 'Released to wild' ? 'bg-green-100 text-green-800' :
+                                      fields['Outcome'] === 'Deceased' ? 'bg-red-100 text-red-800' :
+                                      fields['Outcome'] === 'Escaped' ? 'bg-orange-100 text-orange-800' :
+                                      fields['Outcome'] === 'Captured' ? 'bg-purple-100 text-purple-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>{fields['Outcome']}</span>
+                                  </div>
+                                )}
+                                {fields['Number of animals'] && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-semibold text-gray-600">Number of animals</span>
+                                    <span className="text-sm font-bold text-gray-900">{fields['Number of animals']}</span>
+                                  </div>
+                                )}
+                                {fields['Environmental conditions'] && (
+                                  <div>
+                                    <span className="text-xs font-semibold text-gray-600 block">Environmental conditions</span>
+                                    <p className="text-sm text-gray-700 mt-0.5">{fields['Environmental conditions']}</p>
+                                  </div>
+                                )}
+                                {fields['Other responders'] && (
+                                  <div>
+                                    <span className="text-xs font-semibold text-gray-600 block">Other responders</span>
+                                    <p className="text-sm text-gray-700 mt-0.5">{fields['Other responders']}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+
+                          {r.rescuerImages && r.rescuerImages.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Rescuer Photos</p>
+                              <div className="flex flex-wrap gap-2">
+                                {r.rescuerImages?.map((img, i) => (
+                                  <a key={`res-${i}`} href={img} target="_blank" rel="noopener noreferrer"
+                                    className="group relative overflow-hidden rounded-lg border border-green-200">
+                                    <img src={img} alt="" className="h-16 w-24 object-cover transition group-hover:scale-105" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                        {diaryNotes.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Rescue Diary</p>
+                            <div className="space-y-2">
+                              {diaryNotes.map((n, i) => (
+                                <div key={`diary-${i}`} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                                  <p className="text-xs text-gray-500 mb-1">{n.userName} &middot; {new Date(n.createdAt).toLocaleString()}</p>
+                                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.content.replace('Rescue Diary: ', '')}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {failureNotes.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Failure Reason</p>
+                            <div className="space-y-2">
+                              {failureNotes.map((n, i) => (
+                                <div key={`fail-${i}`} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                                  <p className="text-xs text-gray-500 mb-1">{n.userName} &middot; {new Date(n.createdAt).toLocaleString()}</p>
+                                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.content.replace('Failure Reason: ', '')}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {otherNotes.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Other Notes</p>
+                            <div className="space-y-2">
+                              {otherNotes.map((n, i) => (
+                                <div key={`note-${i}`} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                  <p className="text-xs text-gray-500 mb-0.5">{n.userName} &middot; {new Date(n.createdAt).toLocaleString()}</p>
+                                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.content}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>)
+                    })()}
+
+                    {notesLoading[r._id] && (
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-400">Loading notes...</p>
                       </div>
                     )}
 

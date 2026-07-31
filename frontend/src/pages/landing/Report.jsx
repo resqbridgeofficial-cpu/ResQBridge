@@ -562,7 +562,7 @@ export default function Report() {
           <label className="block text-sm font-medium text-gray-700">
             Wildlife Condition <InfoPopover>
                 <p className="font-semibold">Wildlife Condition</p>
-                <p className="mt-1 text-gray-300">Select the condition that best describes the wildlife at the time of reporting. This helps responders assess the urgency and determine the appropriate response.</p>
+                <p className="mt-1 text-gray-300">Select the condition that best describes the wildlife at the time of reporting. This helps responders assess the situation and determine the appropriate response.</p>
               </InfoPopover>
             </label>
             <select

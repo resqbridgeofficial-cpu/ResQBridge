@@ -35,6 +35,7 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [organization, setOrganization] = useState('')
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const [otp, setOtp] = useState('')
@@ -194,6 +195,7 @@ export default function Register() {
         password,
         confirmPassword,
         otp: otp.trim(),
+        organization: organization.trim() || undefined,
       })
       login(data.token, data.user)
       navigate('/rescuer/dashboard')
@@ -485,6 +487,17 @@ export default function Register() {
                   <p className="mt-1 text-xs text-red-500">{fieldErrors.confirmPassword}</p>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Organization / Affiliation</label>
+              <input
+                type="text" required
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                placeholder="e.g. PWRCCC, BARMM, LGU"
+                className="mt-1.5 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+              />
             </div>
 
             <fieldset>

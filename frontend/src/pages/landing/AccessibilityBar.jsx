@@ -5,18 +5,12 @@ const STORAGE_KEY = 'resqbridge-a11y'
 const defaults = {
   fontSize: 'normal',
   highContrast: false,
-  language: 'en',
 }
 
 const fontSizes = [
   { key: 'normal', label: 'A', scale: '1' },
   { key: 'large', label: 'A+', scale: '1.15' },
   { key: 'xlarge', label: 'A++', scale: '1.3' },
-]
-
-const languages = [
-  { code: 'en', label: 'English' },
-  { code: 'fil', label: 'Filipino' },
 ]
 
 export default function AccessibilityBar() {
@@ -34,7 +28,6 @@ export default function AccessibilityBar() {
     const root = document.documentElement
     root.style.setProperty('--a11y-font-size', p.fontSize === 'normal' ? '100%' : p.fontSize === 'large' ? '115%' : '130%')
     root.classList.toggle('high-contrast', p.highContrast)
-    root.lang = p.language
   }, [])
 
   useEffect(() => {
@@ -91,19 +84,6 @@ export default function AccessibilityBar() {
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Language</p>
-              <select
-                value={prefs.language}
-                onChange={(e) => update('language', e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition-all duration-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-              >
-                {languages.map((lang) => (
-                  <option key={lang.code} value={lang.code}>{lang.label}</option>
-                ))}
-              </select>
             </div>
 
             <div className="flex items-center justify-between">

@@ -13,10 +13,13 @@ const {
   updateAvailability,
   addNote,
   getNotes,
+  saveImages,
+  removeImage,
   updateLocation,
   rejectAssignment,
   getNotifications,
   markAllNotificationsRead,
+  markNotificationRead,
 } = require("../controllers/rescuerController");
 const { upload, uploadImage } = require("../controllers/uploadController");
 const { getShifts, saveShifts } = require("../controllers/shiftController");
@@ -45,9 +48,12 @@ router.get("/activity", asyncHandler(getActivity));
 router.patch("/availability", asyncHandler(updateAvailability));
 router.post("/location", asyncHandler(updateLocation));
 router.post("/reports/:id/reject", reportIdParam, validate, asyncHandler(rejectAssignment));
+router.post("/reports/:id/images", reportIdParam, validate, asyncHandler(saveImages));
+router.delete("/reports/:id/images", reportIdParam, validate, asyncHandler(removeImage));
 router.post("/upload", upload.single("image"), asyncHandler(uploadImage));
 router.get("/notifications", asyncHandler(getNotifications));
 router.post("/notifications/read-all", asyncHandler(markAllNotificationsRead));
+router.patch("/notifications/:id/read", asyncHandler(markNotificationRead));
 
 router.get("/shifts", asyncHandler(getShifts));
 router.post("/shifts", asyncHandler(saveShifts));

@@ -14,6 +14,7 @@ export const createUser = mutation({
       v.literal("admin"),
       v.literal("rescuer"),
     ),
+    organization: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("users", {
@@ -24,6 +25,7 @@ export const createUser = mutation({
       email: args.email,
       password: args.password,
       role: args.role,
+      organization: args.organization,
     });
   },
 });
@@ -72,6 +74,7 @@ export const updateUser = mutation({
     lastName: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
     email: v.optional(v.string()),
+    organization: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -79,11 +82,12 @@ export const updateUser = mutation({
       .withIndex("by_uuid", (q) => q.eq("uuid", args.uuid))
       .unique();
     if (!user) throw new Error("User not found");
-    const patch: Record<string, string> = {};
+    const patch: Record<string, string | undefined> = {};
     if (args.firstName !== undefined) patch.firstName = args.firstName;
     if (args.lastName !== undefined) patch.lastName = args.lastName;
     if (args.phoneNumber !== undefined) patch.phoneNumber = args.phoneNumber;
     if (args.email !== undefined) patch.email = args.email;
+    if (args.organization !== undefined) patch.organization = args.organization;
     return await ctx.db.patch(user._id, patch);
   },
 });

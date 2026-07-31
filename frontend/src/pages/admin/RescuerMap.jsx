@@ -45,6 +45,7 @@ export default function RescuerMap() {
   const [routePath, setRoutePath] = useState([])
   const [routeInfo, setRouteInfo] = useState(null)
   const [loadingRoute, setLoadingRoute] = useState(false)
+  const [activeRescuerIds, setActiveRescuerIds] = useState(new Set())
   const mapRef = useRef(null)
 
   const { isLoaded, loadError } = useLoadScript({ googleMapsApiKey: apiKey })
@@ -62,6 +63,25 @@ export default function RescuerMap() {
     const interval = setInterval(fetchLocations, 15000)
     return () => clearInterval(interval)
   }, [fetchLocations])
+
+  const fetchActiveRescuers = useCallback(async () => {
+    try {
+      const data = await adminApi.getReports()
+      const ids = new Set()
+      ;(data.reports || []).forEach((r) => {
+        if ((r.status === 'en_route' || r.status === 'in_progress') && r.assignedTo) {
+          ids.add(r.assignedTo)
+        }
+      })
+      setActiveRescuerIds(ids)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    fetchActiveRescuers()
+    const interval = setInterval(fetchActiveRescuers, 15000)
+    return () => clearInterval(interval)
+  }, [fetchActiveRescuers])
 
   const fetchAssignments = useCallback(async (rescuer) => {
     if (!rescuer?.userId) return
@@ -141,20 +161,21 @@ export default function RescuerMap() {
   }, [selectedRescuer])
 
   const filtered = useMemo(() => {
+    const active = locations.filter((l) => activeRescuerIds.has(l.userId))
     const list = search.trim()
-      ? locations.filter((l) => l.userName?.toLowerCase().includes(search.toLowerCase()))
-      : locations
+      ? active.filter((l) => l.userName?.toLowerCase().includes(search.toLowerCase()))
+      : active
     return [...list].sort((a, b) => {
       const aOnline = Date.now() - new Date(a.updatedAt).getTime() < 60000
       const bOnline = Date.now() - new Date(b.updatedAt).getTime() < 60000
       if (aOnline !== bOnline) return aOnline ? -1 : 1
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     })
-  }, [locations, search])
+  }, [locations, search, activeRescuerIds])
 
   const enRouteCount = useMemo(
-    () => locations.filter((l) => Date.now() - new Date(l.updatedAt).getTime() < 60000).length,
-    [locations],
+    () => activeRescuerIds.size,
+    [activeRescuerIds],
   )
 
   const center = selectedRescuer
@@ -188,7 +209,7 @@ export default function RescuerMap() {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Rescuer Map</h2>
           <p className="text-sm text-gray-500">
-            {loading ? 'Loading...' : `${locations.length} rescuer${locations.length !== 1 ? 's' : ''} tracked`}
+            {loading ? 'Loading...' : `${filtered.length} rescuer${filtered.length !== 1 ? 's' : ''} on route`}
             {enRouteCount > 0 && ` · ${enRouteCount} active now`}
           </p>
         </div>
@@ -209,6 +230,7 @@ export default function RescuerMap() {
             onLoad={(map) => { mapRef.current = map }}
           >
             {locations
+              .filter((l) => activeRescuerIds.has(l.userId))
               .filter((loc) => !trackingReport || loc.userId === selectedRescuer?.userId)
               .map((loc) => (
                 <Marker
@@ -368,7 +390,7 @@ export default function RescuerMap() {
             {!selectedRescuer || trackingReport ? (
               filtered.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-sm text-gray-400">
-                  {search ? 'No rescuers found' : 'No rescuers available'}
+                  {search ? 'No rescuers found' : 'No rescuers on route'}
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
@@ -434,11 +456,6 @@ export default function RescuerMap() {
                         </span>
                       </div>
                       <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
-                        {rep.urgency && (
-                          <span className={`font-bold ${rep.urgency === 'high' || rep.urgency === 'critical' ? 'text-red-500' : 'text-gray-500'}`}>
-                            {rep.urgency}
-                          </span>
-                        )}
                         <span>{new Date(rep.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </div>
